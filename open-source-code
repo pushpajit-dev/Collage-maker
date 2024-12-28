@@ -1,0 +1,389 @@
+function MainComponent({
+  title = "Collage Maker Online",
+  gridSize = 3,
+  setGridSize,
+  images = Array.from({ length: 9 }).fill(null),
+  setImages,
+  handleImageUpload,
+  error,
+}) {
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState("");
+  const [aspectRatio, setAspectRatio] = useState("1:1");
+  const [margin, setMargin] = useState(4);
+  const [marginColor, setMarginColor] = useState("#ffffff");
+  const [boxScale, setBoxScale] = useState(100);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [cropData, setCropData] = useState({});
+  const [cropHandleSize, setCropHandleSize] = useState(20);
+  const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [draggedImage, setDraggedImage] = useState(null);
+  const [imageFormat, setImageFormat] = useState("png");
+  const [imageQuality, setImageQuality] = useState(80);
+  const [estimatedSize, setEstimatedSize] = useState(0);
+  const collageRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [contextMenu, setContextMenu] = useState({
+    show: false,
+    x: 0,
+    y: 0,
+    index: null,
+  });
+
+  const resetSettings = () => {
+    setAspectRatio("1:1");
+    setMargin(4);
+    setMarginColor("#ffffff");
+    setBoxScale(100);
+    setCropHandleSize(20);
+    setImageQuality(80);
+    setImageFormat("png");
+  };
+
+  const resetAll = () => {
+    resetSettings();
+    setImages(Array(gridSize * gridSize).fill(null));
+    setCropData({});
+  };
+
+  const downloadImage = async () => {
+    if (!collageRef.current) return;
+
+    const canvas = await html2canvas(collageRef.current);
+    const dataUrl = canvas.toDataURL(
+      `image/${imageFormat}`,
+      imageQuality / 100,
+    );
+
+    const link = document.createElement("a");
+    link.download = `collage.${imageFormat}`;
+    link.href = dataUrl;
+    link.click();
+  };
+
+  const handleSubmitComment = (e) => {
+    e.preventDefault();
+    if (newComment.trim()) {
+      setComments([...comments, { text: newComment, date: new Date() }]);
+      setNewComment("");
+    }
+  };
+
+  useEffect(() => {
+    if (collageRef.current) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const width = collageRef.current.offsetWidth;
+      const height = collageRef.current.offsetHeight;
+      canvas.width = width;
+      canvas.height = height;
+
+      const estimatedBytes = width * height * 4 * (imageQuality / 100);
+      const estimatedKB = Math.round(estimatedBytes / 1024);
+      setEstimatedSize(estimatedKB);
+    }
+  }, [imageQuality, images]);
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu({ show: false, x: 0, y: 0, index: null });
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
+
+  const handleContextMenu = (e, index) => {
+    e.preventDefault();
+    setContextMenu({
+      show: true,
+      x: e.pageX,
+      y: e.pageY,
+      index,
+    });
+  };
+
+  const handleRemoveImage = (index) => {
+    const newImages = [...images];
+    newImages[index] = null;
+    setImages(newImages);
+    setContextMenu({ show: false, x: 0, y: 0, index: null });
+  };
+
+  const handleReplaceImage = async (index, file) => {
+    if (file) {
+      await handleImageUpload(index, file);
+      setContextMenu({ show: false, x: 0, y: 0, index: null });
+    }
+  };
+
+  const handleFileSelect = async (e, index) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await handleReplaceImage(index, file);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8 font-roboto text-center">
+          {title}
+        </h1>
+
+        <div className="mb-6 space-y-4">
+          <div className="flex flex-wrap gap-4">
+            <select
+              value={gridSize}
+              onChange={(e) => {
+                const size = parseInt(e.target.value);
+                setGridSize(size);
+                setImages(Array(size * size).fill(null));
+              }}
+              className="w-full md:w-auto px-4 py-2 rounded border"
+            >
+              <option value={2}>2 x 2</option>
+              <option value={3}>3 x 3</option>
+              <option value={4}>4 x 4</option>
+            </select>
+
+            <select
+              value={aspectRatio}
+              onChange={(e) => setAspectRatio(e.target.value)}
+              className="w-full md:w-auto px-4 py-2 rounded border"
+            >
+              <option value="1:1">Square (1:1)</option>
+              <option value="4:3">Standard (4:3)</option>
+              <option value="16:9">Widescreen (16:9)</option>
+              <option value="3:4">Portrait (3:4)</option>
+              <option value="9:16">Mobile (9:16)</option>
+            </select>
+
+            <select
+              value={imageFormat}
+              onChange={(e) => setImageFormat(e.target.value)}
+              className="w-full md:w-auto px-4 py-2 rounded border"
+            >
+              <option value="png">PNG</option>
+              <option value="jpeg">JPG</option>
+              <option value="webp">WebP</option>
+            </select>
+
+            <button
+              onClick={resetSettings}
+              className="w-full md:w-auto px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+            >
+              <i className="fas fa-undo mr-2"></i>
+              Reset Settings
+            </button>
+
+            <button
+              onClick={resetAll}
+              className="w-full md:w-auto px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            >
+              <i className="fas fa-trash mr-2"></i>
+              Reset All
+            </button>
+
+            <button
+              onClick={downloadImage}
+              className="w-full md:w-auto px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              disabled={images.every((img) => !img)}
+            >
+              <i className="fas fa-download mr-2"></i>
+              Download
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block mb-2">Margin Size</label>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={margin}
+                onChange={(e) => setMargin(parseInt(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-2">Margin Color</label>
+              <input
+                type="color"
+                value={marginColor}
+                onChange={(e) => setMarginColor(e.target.value)}
+                className="w-full h-10"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-2">Box Scale</label>
+              <input
+                type="range"
+                min="50"
+                max="150"
+                value={boxScale}
+                onChange={(e) => setBoxScale(parseInt(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-2">
+                Image Quality ({imageQuality}%) ~{estimatedSize}KB
+              </label>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                value={imageQuality}
+                onChange={(e) => setImageQuality(parseInt(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div
+          ref={collageRef}
+          className="grid gap-2"
+          style={{
+            gridTemplateColumns: `repeat(${gridSize}, 1fr)`,
+            backgroundColor: marginColor,
+            padding: margin,
+          }}
+        >
+          {images.map((image, index) => (
+            <div
+              key={index}
+              className="aspect-square relative border-2 border-dashed border-gray-300 rounded-lg overflow-hidden hover:border-blue-500 transition-colors"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                  handleImageUpload(index, file);
+                }
+              }}
+              onContextMenu={(e) => image && handleContextMenu(e, index)}
+            >
+              {image ? (
+                <img
+                  src={image}
+                  alt={`Collage image ${index + 1}`}
+                  className="w-full h-full object-cover"
+                  onClick={() => setSelectedImage(index)}
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        handleImageUpload(index, e.target.files[0]);
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  <i className="fas fa-plus text-gray-400 text-3xl"></i>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {contextMenu.show && (
+          <div
+            className="fixed bg-white rounded-lg shadow-lg py-2 z-50"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => handleRemoveImage(contextMenu.index)}
+              className="w-full px-4 py-2 text-left hover:bg-gray-100"
+            >
+              <i className="fas fa-trash mr-2"></i>
+              Remove Image
+            </button>
+            <label className="w-full px-4 py-2 text-left hover:bg-gray-100 cursor-pointer block">
+              <i className="fas fa-exchange-alt mr-2"></i>
+              Replace Image
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleFileSelect(e, contextMenu.index)}
+              />
+            </label>
+          </div>
+        )}
+
+        <div className="mt-8 bg-white rounded-lg p-6 shadow-md">
+          <h2 className="text-2xl font-bold mb-4">Comments</h2>
+          <form onSubmit={handleSubmitComment} className="mb-6">
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              className="w-full p-3 border rounded-lg mb-2"
+              placeholder="Leave your feedback..."
+              rows="3"
+              name="comment"
+            />
+            <button
+              type="submit"
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            >
+              Post Comment
+            </button>
+          </form>
+          <div className="space-y-4">
+            {comments.map((comment, index) => (
+              <div key={index} className="border-b pb-4">
+                <p className="text-gray-700">{comment.text}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {comment.date.toLocaleDateString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryComponent() {
+  const [gridSize, setGridSize] = useState(3);
+  const [images, setImages] = useState(Array.from({ length: 9 }).fill(null));
+  const [upload, { loading }] = useUpload();
+  const [error, setError] = useState(null);
+
+  const handleImageUpload = async (index, file) => {
+    const { url, error } = await upload({ file });
+    if (error) {
+      setError(error);
+      return;
+    }
+    const newImages = [...images];
+    newImages[index] = url;
+    setImages(newImages);
+  };
+
+  return (
+    <MainComponent
+      title="Collage Maker Online"
+      gridSize={gridSize}
+      setGridSize={setGridSize}
+      images={images}
+      setImages={setImages}
+      handleImageUpload={handleImageUpload}
+      error={error}
+    />
+  );
+}
+
+
