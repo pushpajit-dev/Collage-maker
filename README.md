@@ -22,7 +22,7 @@
 > - No software need to purchase and free download.
 > - Accessible from any device.
 
-> ![READ CODE](https://traff.co/qQ037pwn)
+> ![READ CODE](open-source-code)
 ## **Project Code is Open Sourced**
 > Download or Read the above code, created on node.js
 
